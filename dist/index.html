@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f8f7f3">
+  <meta name="description" content="Карточки и режим заучивания шведских слов с примерами и заметками на обеих сторонах.">
+  <title>Ordna — учи шведский по карточкам</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#learn" aria-label="Ordna, главная"><span class="brand-mark">ö</span><span>ordna<span class="brand-dot">.</span></span></a>
+      <div class="side-caption">МОИ МОДУЛИ</div>
+      <nav id="module-nav" class="module-nav" aria-label="Модули"></nav>
+      <div class="side-bottom"><span class="tiny-star">✦</span><p>Слова запоминаются лучше,<br>когда у них есть контекст.</p></div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <button id="mobile-menu" class="icon-button mobile-menu" aria-label="Открыть меню">☰</button>
+        <div class="breadcrumb">Библиотека <span>/</span> <strong id="crumb-title">Шведский B1/B2</strong></div>
+        <div class="top-actions"><button id="export-button" class="quiet-button" title="Сохранить свои карточки и прогресс в файл">↓ <span>Экспорт</span></button><label class="quiet-button import-label" title="Загрузить ранее сохранённые карточки и прогресс">↑ <span>Импорт</span><input id="import-input" type="file" accept="application/json,.json" hidden></label></div>
+      </header>
+      <div class="page-content">
+        <div class="eyebrow"><span class="eyebrow-line"></span> ШВЕДСКИЙ → РУССКИЙ</div>
+        <div class="page-heading"><div><h1 id="module-title">Шведский B1/B2</h1><p id="module-subtitle">Partikelverb och prepositioner</p></div><span id="card-count" class="count-badge">41 карточка</span></div>
+        <div class="tabs" role="tablist" aria-label="Режим"><button class="tab active" data-view="learn" role="tab" aria-selected="true">Заучивание</button><button class="tab" data-view="cards" role="tab" aria-selected="false">Карточки</button><button class="tab" data-view="edit" role="tab" aria-selected="false">Редактор</button></div>
+        <section id="learn-view" class="view" aria-label="Заучивание">
+          <div class="learn-layout"><div class="learn-main"><div class="section-top"><div><div class="section-kicker">РЕЖИМ ЗАУЧИВАНИЯ</div><h2>Учить шаг за шагом</h2></div><button id="reset-progress" class="text-button">Начать заново ↗</button></div>
+            <div class="progress-track" role="progressbar" aria-label="Выучено" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progress-fill"></div></div><div class="progress-label"><span id="progress-copy">0 из 41 освоено</span><span id="progress-percent">0%</span></div>
+            <div id="question-card" class="question-card"></div>
+          </div><aside class="learn-aside"><div class="aside-card"><div class="aside-icon">✳</div><h3>Как это работает</h3><p>Сначала вспомните перевод, затем проверьте себя. Ошибки вернутся в следующем круге.</p><div class="aside-rule"></div><div class="aside-stat"><span>В этом модуле</span><strong id="aside-total">41</strong></div><div class="aside-stat"><span>Освоено</span><strong id="aside-mastered">0</strong></div><div class="aside-stat"><span>Ещё учить</span><strong id="aside-remaining">41</strong></div></div><div class="aside-note"><span>↗</span> Примеры и заметки видны после ответа и на обратной стороне карточки.</div></aside></div>
+        </section>
+        <section id="cards-view" class="view hidden" aria-label="Карточки"><div class="section-top"><div><div class="section-kicker">ПРОСМОТР</div><h2>Карточки</h2></div><span id="flash-index" class="muted">1 / 41</span></div><button id="flashcard" class="flashcard" aria-label="Перевернуть карточку"><span class="flash-label" id="flash-label">ТЕРМИН</span><strong id="flash-text"></strong><small id="flash-note"></small><span class="flash-hint">Нажмите, чтобы перевернуть ↗</span></button><div class="flash-controls"><button id="flash-prev" class="round-button" aria-label="Предыдущая карточка">←</button><span id="flash-position">1 / 41</span><button id="flash-next" class="round-button" aria-label="Следующая карточка">→</button></div><p class="keyboard-hint">Клавиши ← → переключают карточки, пробел переворачивает.</p></section>
+        <section id="edit-view" class="view hidden" aria-label="Редактор"><div class="section-top"><div><div class="section-kicker">ВАШИ СЛОВА</div><h2>Карточки и аннотации</h2></div><button id="add-card" class="primary-button">+ Новая карточка</button></div><p class="editor-intro">Добавьте пример, пояснение или комментарий к любой стороне. Изменения сохраняются в этом браузере.</p><div id="editor-list" class="editor-list"></div></section>
+      </div>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="app.js" defer></script>
+</body>
+</html>
