@@ -173,7 +173,7 @@ function renderQuestion() {
   const top = `<div class="question-head"><span class="question-number">ВОПРОС ${roundPosition} <span>/ ${roundTotal}</span></span><span class="question-stage">${stageLabel}</span></div><div class="term-label">ТЕРМИН</div><div class="question-term">${esc(card.term)}</div>${card.termNote?`<div class="term-note">${esc(card.termNote)}</div>`:''}<div class="question-divider"></div>`;
   if (answerState) {
     const good = answerState.correct;
-    $('#question-card').innerHTML = top + `<div class="result ${good?'correct':'wrong'}"><span class="result-icon">${good?'✓':'↺'}</span><div><strong>${good?'Верно!':'Запомните ответ'}</strong><p>${good?'Отлично, двигаемся дальше.':'Эта карточка вернётся в повторение.'}</p></div></div><div class="answer-reveal"><span>${asksForPreposition?'ПРЕДЛОГ':'ПЕРЕВОД'}</span><strong>${esc(card.definition)}</strong>${card.definitionNote?`<p>${esc(card.definitionNote)}</p>`:''}</div><button id="next-question" class="primary-button next-button">Следующий вопрос <span>→</span></button>`;
+    $('#question-card').innerHTML = top + `<div class="result ${good?'correct':'wrong'}"><span class="result-icon">${good?'✓':'↺'}</span><div><strong>${good?'Верно!':'Запомните ответ'}</strong><p>${good?'Отлично, двигаемся дальше.':'Эта карточка вернётся в повторение.'}</p></div></div><div class="answer-reveal"><span>${asksForPreposition?'ПРЕДЛОГ':'ПЕРЕВОД'}</span><strong>${esc(card.definition)}</strong>${card.definitionNote?`<p>${esc(card.definitionNote)}</p>`:''}</div>${!good && !answerState.skipped?'<button id="mark-answer-correct" class="review-button" type="button">Ответил(а) верно</button>':''}<button id="next-question" class="primary-button next-button" type="button">Следующий вопрос <span>→</span></button>`;
     return;
   }
   if (stage === 'choice') {
@@ -186,11 +186,20 @@ function renderQuestion() {
 function respond(response, skipped=false) {
   if (answerState) return;
   const card = questionCard();
+  const previousScore = scores[card.id] || 0;
   const accepted = card.definition.split(/[,;]/).map(normalize);
   const correct = !skipped && (normalize(response) === normalize(card.definition) || accepted.includes(normalize(response)));
   playSound(correct ? 'correct' : 'retry');
-  scores[card.id] = correct ? Math.min(2, (scores[card.id] || 0)+1) : 0;
-  answerState = {correct};
+  scores[card.id] = correct ? Math.min(2, previousScore+1) : 0;
+  answerState = {correct, skipped, previousScore};
+  persist(); updateStats(); renderQuestion();
+}
+function markAnswerCorrect() {
+  if (!answerState || answerState.correct || answerState.skipped) return;
+  const card = questionCard();
+  scores[card.id] = Math.min(2, answerState.previousScore + 1);
+  answerState.correct = true;
+  playSound('correct');
   persist(); updateStats(); renderQuestion();
 }
 function advance() { playSound('tap'); currentId = null; answerState = null; renderQuestion(); if (window.innerWidth < 900) $('#question-card').scrollIntoView({behavior:'smooth',block:'start'}); }
@@ -221,6 +230,7 @@ document.addEventListener('click', async event => {
   const tab = event.target.closest('.tab'); if (tab) { if(view!==tab.dataset.view)playSound('tap');switchView(tab.dataset.view); return; }
   const option = event.target.closest('.option'); if (option) { respond(option.dataset.answer); return; }
   if (event.target.closest('#skip-question')) { respond('', true); return; }
+  if (event.target.closest('#mark-answer-correct')) { markAnswerCorrect(); return; }
   if (event.target.closest('#next-question')) { advance(); return; }
   if (event.target.closest('#completed-reset') || event.target.closest('#reset-progress')) { if (confirm('Сбросить прогресс заучивания этого модуля?')) { scores={}; queue=[];currentId=null;answerState=null;persist();renderAll();toast('Прогресс сброшен'); } return; }
   if (event.target.closest('#flashcard')) { playSound('flip');flashBack=!flashBack;renderFlash();return; }
