@@ -17,6 +17,43 @@ let editId = null;
 const soundKey = 'ordna:sound:v1';
 let soundEnabled = localStorage.getItem(soundKey) !== 'off';
 let audioContext = null;
+const useMediaAudio = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const mediaSoundUrls = {};
+const soundNotes = {
+  tap: [[470, 0, .055, .05]],
+  flip: [[540, 0, .075, .055]],
+  correct: [[523, 0, .12, .07], [659, .065, .16, .06]],
+  retry: [[350, 0, .095, .05]]
+};
+
+function mediaSoundUrl(kind) {
+  if (mediaSoundUrls[kind]) return mediaSoundUrls[kind];
+  const notes = soundNotes[kind] || [];
+  const rate = 22050;
+  const frameCount = Math.ceil((Math.max(...notes.map(([, delay, duration]) => delay + duration)) + .01) * rate);
+  const bytes = new Uint8Array(44 + frameCount * 2);
+  const view = new DataView(bytes.buffer);
+  const label = (offset, value) => { for (let i = 0; i < value.length; i++) bytes[offset + i] = value.charCodeAt(i); };
+  label(0, 'RIFF'); view.setUint32(4, bytes.length - 8, true);
+  label(8, 'WAVE'); label(12, 'fmt '); view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true);
+  view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  label(36, 'data'); view.setUint32(40, frameCount * 2, true);
+  for (let i = 0; i < frameCount; i++) {
+    const time = i / rate;
+    let sample = 0;
+    for (const [frequency, delay, duration, volume] of notes) {
+      const elapsed = time - delay;
+      if (elapsed < 0 || elapsed > duration) continue;
+      const envelope = Math.min(1, elapsed / .012) * Math.exp(-4 * elapsed / duration);
+      sample += Math.sin(2 * Math.PI * frequency * elapsed) * envelope * volume * 4;
+    }
+    view.setInt16(44 + i * 2, Math.round(Math.max(-1, Math.min(1, sample)) * 32767), true);
+  }
+  mediaSoundUrls[kind] = `data:audio/wav;base64,${btoa(String.fromCharCode(...bytes))}`;
+  return mediaSoundUrls[kind];
+}
 
 function updateSoundButton() {
   const button = $('#sound-toggle');
@@ -28,20 +65,20 @@ function updateSoundButton() {
 }
 function playSound(kind) {
   if (!soundEnabled) return;
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) return;
   try {
     if (navigator.audioSession) navigator.audioSession.type = 'playback';
+    if (useMediaAudio) {
+      const audio = new Audio(mediaSoundUrl(kind));
+      void audio.play().catch(() => {});
+      return;
+    }
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
     if (audioContext?.state === 'closed') audioContext = null;
     audioContext ||= new AudioContextClass();
     if (audioContext.state !== 'running') void audioContext.resume().catch(() => {});
     const now = audioContext.currentTime;
-    const notes = {
-      tap: [[470, 0, .055, .05]],
-      flip: [[540, 0, .075, .055]],
-      correct: [[523, 0, .12, .07], [659, .065, .16, .06]],
-      retry: [[350, 0, .095, .05]]
-    }[kind] || [];
+    const notes = soundNotes[kind] || [];
     for (const [frequency, delay, duration, volume] of notes) {
       const oscillator = audioContext.createOscillator();
       const envelope = audioContext.createGain();
