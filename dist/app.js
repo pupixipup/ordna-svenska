@@ -9,6 +9,8 @@ let view = 'learn';
 let queue = [];
 let currentId = null;
 let answerState = null;
+let roundPosition = 0;
+let roundTotal = 0;
 let flashIndex = 0;
 let flashBack = false;
 let editId = null;
@@ -29,8 +31,10 @@ function playSound(kind) {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) return;
   try {
+    if (navigator.audioSession) navigator.audioSession.type = 'playback';
+    if (audioContext?.state === 'closed') audioContext = null;
     audioContext ||= new AudioContextClass();
-    if (audioContext.state === 'suspended') void audioContext.resume().catch(() => {});
+    if (audioContext.state !== 'running') void audioContext.resume().catch(() => {});
     const now = audioContext.currentTime;
     const notes = {
       tap: [[470, 0, .055, .05]],
@@ -78,6 +82,8 @@ async function loadModule(id) {
   queue = [];
   currentId = null;
   answerState = null;
+  roundPosition = 0;
+  roundTotal = 0;
   flashIndex = 0;
   flashBack = false;
   $('#module-title').textContent = meta.title;
@@ -102,8 +108,13 @@ function updateStats() {
 function nextQuestion() {
   const remaining = cards.filter(card => (scores[card.id] || 0) < 2);
   if (!remaining.length) { currentId = null; return; }
-  if (!queue.length) queue = shuffle(remaining.map(card => card.id));
+  if (!queue.length) {
+    queue = shuffle(remaining.map(card => card.id));
+    roundTotal = queue.length;
+    roundPosition = 0;
+  }
   currentId = queue.shift();
+  roundPosition++;
   answerState = null;
 }
 function questionCard() { return cards.find(card => card.id === currentId); }
@@ -120,18 +131,19 @@ function renderQuestion() {
   if (!currentId) { $('#question-card').innerHTML = '<div class="completed"><span>✳</span><h3>Все карточки освоены!</h3><p>Вы прошли весь модуль. Можно начать заново или повторить карточки.</p><button class="primary-button" id="completed-reset">Начать заново</button></div>'; return; }
   const card = questionCard();
   const stage = (scores[card.id] || 0) === 0 ? 'choice' : 'write';
-  const position = cards.filter(item => (scores[item.id] || 0) >= 2).length + 1;
-  const top = `<div class="question-head"><span class="question-number">ВОПРОС ${position} <span>/ ${cards.length}</span></span><span class="question-stage">${stage==='choice'?'Выберите перевод':'Напишите перевод'}</span></div><div class="term-label">ТЕРМИН</div><div class="question-term">${esc(card.term)}</div>${card.termNote?`<div class="term-note">${esc(card.termNote)}</div>`:''}<div class="question-divider"></div>`;
+  const asksForPreposition = /_{2,}/.test(card.term);
+  const stageLabel = asksForPreposition ? (stage === 'choice' ? 'Выберите предлог' : 'Напишите предлог') : (stage === 'choice' ? 'Выберите перевод' : 'Напишите перевод');
+  const top = `<div class="question-head"><span class="question-number">ВОПРОС ${roundPosition} <span>/ ${roundTotal}</span></span><span class="question-stage">${stageLabel}</span></div><div class="term-label">ТЕРМИН</div><div class="question-term">${esc(card.term)}</div>${card.termNote?`<div class="term-note">${esc(card.termNote)}</div>`:''}<div class="question-divider"></div>`;
   if (answerState) {
     const good = answerState.correct;
-    $('#question-card').innerHTML = top + `<div class="result ${good?'correct':'wrong'}"><span class="result-icon">${good?'✓':'↺'}</span><div><strong>${good?'Верно!':'Запомните ответ'}</strong><p>${good?'Отлично, двигаемся дальше.':'Эта карточка вернётся в повторение.'}</p></div></div><div class="answer-reveal"><span>ПЕРЕВОД</span><strong>${esc(card.definition)}</strong>${card.definitionNote?`<p>${esc(card.definitionNote)}</p>`:''}</div><button id="next-question" class="primary-button next-button">Следующий вопрос <span>→</span></button>`;
+    $('#question-card').innerHTML = top + `<div class="result ${good?'correct':'wrong'}"><span class="result-icon">${good?'✓':'↺'}</span><div><strong>${good?'Верно!':'Запомните ответ'}</strong><p>${good?'Отлично, двигаемся дальше.':'Эта карточка вернётся в повторение.'}</p></div></div><div class="answer-reveal"><span>${asksForPreposition?'ПРЕДЛОГ':'ПЕРЕВОД'}</span><strong>${esc(card.definition)}</strong>${card.definitionNote?`<p>${esc(card.definitionNote)}</p>`:''}</div><button id="next-question" class="primary-button next-button">Следующий вопрос <span>→</span></button>`;
     return;
   }
   if (stage === 'choice') {
     const options = distractors(card);
     $('#question-card').innerHTML = top + `<div class="prompt-label">Выберите правильный ответ</div><div class="options">${options.map((text,index)=>`<button class="option" data-answer="${esc(text)}"><span>${String.fromCharCode(65+index)}</span>${esc(text)}</button>`).join('')}</div><button id="skip-question" class="skip-button">Не уверены? Показать ответ</button>`;
   } else {
-    $('#question-card').innerHTML = top + `<label class="prompt-label" for="typed-answer">Введите перевод</label><form id="answer-form"><input id="typed-answer" autocomplete="off" placeholder="Ваш ответ…" aria-label="Ваш ответ"><button class="primary-button" type="submit">Ответить →</button></form><button id="skip-question" class="skip-button">Не уверены? Показать ответ</button>`;
+    $('#question-card').innerHTML = top + `<label class="prompt-label" for="typed-answer">${asksForPreposition?'Введите предлог':'Введите перевод'}</label><form id="answer-form"><input id="typed-answer" autocomplete="off" placeholder="Ваш ответ…" aria-label="Ваш ответ"><button class="primary-button" type="submit">Ответить →</button></form><button id="skip-question" class="skip-button">Не уверены? Показать ответ</button>`;
   }
 }
 function respond(response, skipped=false) {
@@ -144,7 +156,7 @@ function respond(response, skipped=false) {
   answerState = {correct};
   persist(); updateStats(); renderQuestion();
 }
-function advance() { playSound('tap'); currentId = null; answerState = null; renderQuestion(); }
+function advance() { playSound('tap'); currentId = null; answerState = null; renderQuestion(); if (window.innerWidth < 900) $('#question-card').scrollIntoView({behavior:'smooth',block:'start'}); }
 function renderFlash() {
   if (!cards.length) { $('#flash-text').textContent = 'Пока нет карточек'; return; }
   flashIndex = Math.max(0, Math.min(flashIndex, cards.length-1));
