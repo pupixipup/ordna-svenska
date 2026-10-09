@@ -33,10 +33,10 @@ function playSound(kind) {
     if (audioContext.state === 'suspended') void audioContext.resume().catch(() => {});
     const now = audioContext.currentTime;
     const notes = {
-      tap: [[470, 0, .055, .012]],
-      flip: [[540, 0, .075, .014]],
-      correct: [[523, 0, .12, .018], [659, .065, .16, .016]],
-      retry: [[350, 0, .095, .012]]
+      tap: [[470, 0, .055, .05]],
+      flip: [[540, 0, .075, .055]],
+      correct: [[523, 0, .12, .07], [659, .065, .16, .06]],
+      retry: [[350, 0, .095, .05]]
     }[kind] || [];
     for (const [frequency, delay, duration, volume] of notes) {
       const oscillator = audioContext.createOscillator();
@@ -108,10 +108,11 @@ function nextQuestion() {
 }
 function questionCard() { return cards.find(card => card.id === currentId); }
 function distractors(card) {
-  const alternatives = [...new Set(cards.filter(item => item.id !== card.id && item.definition !== card.definition).map(item => item.definition))];
-  const isShort = card.definition.length <= 8;
-  const similar = alternatives.filter(item => (item.length <= 8) === isShort);
-  return shuffle([card.definition, ...shuffle(similar.length >= 3 ? similar : alternatives).slice(0,3)]);
+  const asksForPreposition = /_{2,}/.test(card.term);
+  const alternatives = [...new Set(cards
+    .filter(item => item.id !== card.id && item.definition !== card.definition && /_{2,}/.test(item.term) === asksForPreposition)
+    .map(item => item.definition))];
+  return shuffle([card.definition, ...shuffle(alternatives).slice(0,3)]);
 }
 function renderQuestion() {
   if (!cards.length) { $('#question-card').innerHTML = '<div class="empty-state">Добавьте первую карточку в редакторе.</div>'; return; }
