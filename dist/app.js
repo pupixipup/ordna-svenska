@@ -12,6 +12,47 @@ let answerState = null;
 let flashIndex = 0;
 let flashBack = false;
 let editId = null;
+const soundKey = 'ordna:sound:v1';
+let soundEnabled = localStorage.getItem(soundKey) !== 'off';
+let audioContext = null;
+
+function updateSoundButton() {
+  const button = $('#sound-toggle');
+  button.classList.toggle('is-muted', !soundEnabled);
+  button.setAttribute('aria-pressed', String(soundEnabled));
+  button.setAttribute('aria-label', soundEnabled ? 'Отключить звук' : 'Включить звук');
+  button.title = soundEnabled ? 'Отключить звук' : 'Включить звук';
+  $('#sound-label').textContent = soundEnabled ? 'Звук вкл' : 'Звук выкл';
+}
+function playSound(kind) {
+  if (!soundEnabled) return;
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+  try {
+    audioContext ||= new AudioContextClass();
+    if (audioContext.state === 'suspended') void audioContext.resume().catch(() => {});
+    const now = audioContext.currentTime;
+    const notes = {
+      tap: [[470, 0, .055, .012]],
+      flip: [[540, 0, .075, .014]],
+      correct: [[523, 0, .12, .018], [659, .065, .16, .016]],
+      retry: [[350, 0, .095, .012]]
+    }[kind] || [];
+    for (const [frequency, delay, duration, volume] of notes) {
+      const oscillator = audioContext.createOscillator();
+      const envelope = audioContext.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(frequency, now + delay);
+      envelope.gain.setValueAtTime(.0001, now + delay);
+      envelope.gain.exponentialRampToValueAtTime(volume, now + delay + .012);
+      envelope.gain.exponentialRampToValueAtTime(.0001, now + delay + duration);
+      oscillator.connect(envelope);
+      envelope.connect(audioContext.destination);
+      oscillator.start(now + delay);
+      oscillator.stop(now + delay + duration + .01);
+    }
+  } catch { /* Sound is optional when a browser blocks audio. */ }
+}
 
 function toast(message) { const el = $('#toast'); el.textContent = message; el.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.remove('show'), 3500); }
 function normalize(text) { return String(text || '').trim().toLocaleLowerCase().replace(/[.,!?;:()]/g, '').replace(/\s+/g, ' '); }
@@ -97,11 +138,12 @@ function respond(response, skipped=false) {
   const card = questionCard();
   const accepted = card.definition.split(/[,;]/).map(normalize);
   const correct = !skipped && (normalize(response) === normalize(card.definition) || accepted.includes(normalize(response)));
+  playSound(correct ? 'correct' : 'retry');
   scores[card.id] = correct ? Math.min(2, (scores[card.id] || 0)+1) : 0;
   answerState = {correct};
   persist(); updateStats(); renderQuestion();
 }
-function advance() { currentId = null; answerState = null; renderQuestion(); }
+function advance() { playSound('tap'); currentId = null; answerState = null; renderQuestion(); }
 function renderFlash() {
   if (!cards.length) { $('#flash-text').textContent = 'Пока нет карточек'; return; }
   flashIndex = Math.max(0, Math.min(flashIndex, cards.length-1));
@@ -124,15 +166,16 @@ function renderEditor() {
   $('#editor-list').innerHTML = cards.map((card,index) => `<div class="editor-item"><div class="editor-item-head"><span class="editor-num">${String(index+1).padStart(2,'0')}</span><div><strong>${esc(card.term)}</strong><small>${esc(card.definition)}</small></div><button class="edit-toggle" data-edit="${esc(card.id)}" aria-label="Редактировать ${esc(card.term)}">${editId===card.id?'Свернуть −':'Редактировать ↗'}</button></div>${editId===card.id?`<form class="edit-form" data-id="${esc(card.id)}"><div class="edit-grid"><div class="edit-side"><span class="edit-side-label">01 / ШВЕДСКИЙ</span><label>Термин<input name="term" required value="${esc(card.term)}"></label><label>Аннотация или пример<textarea name="termNote" rows="3" placeholder="Например: Hon bryter av grenar.">${esc(card.termNote)}</textarea></label></div><div class="edit-side"><span class="edit-side-label">02 / РУССКИЙ</span><label>Перевод<input name="definition" required value="${esc(card.definition)}"></label><label>Аннотация или комментарий<textarea name="definitionNote" rows="3" placeholder="Пояснение, ассоциация, комментарий…">${esc(card.definitionNote)}</textarea></label></div></div><div class="edit-actions"><button class="danger-button" type="button" data-delete="${esc(card.id)}">Удалить карточку</button><button class="primary-button" type="submit">Сохранить изменения</button></div></form>`:''}</div>`).join('');
 }
 document.addEventListener('click', async event => {
-  const moduleButton = event.target.closest('[data-module]'); if (moduleButton) { await loadModule(moduleButton.dataset.module); $('#mobile-menu').classList.remove('open'); $('.sidebar').classList.remove('open'); return; }
-  const tab = event.target.closest('.tab'); if (tab) { switchView(tab.dataset.view); return; }
+  if (event.target.closest('#sound-toggle')) { soundEnabled=!soundEnabled;localStorage.setItem(soundKey,soundEnabled?'on':'off');updateSoundButton();if(soundEnabled)playSound('tap');return; }
+  const moduleButton = event.target.closest('[data-module]'); if (moduleButton) { playSound('tap'); await loadModule(moduleButton.dataset.module); $('#mobile-menu').classList.remove('open'); $('.sidebar').classList.remove('open'); return; }
+  const tab = event.target.closest('.tab'); if (tab) { if(view!==tab.dataset.view)playSound('tap');switchView(tab.dataset.view); return; }
   const option = event.target.closest('.option'); if (option) { respond(option.dataset.answer); return; }
   if (event.target.closest('#skip-question')) { respond('', true); return; }
   if (event.target.closest('#next-question')) { advance(); return; }
   if (event.target.closest('#completed-reset') || event.target.closest('#reset-progress')) { if (confirm('Сбросить прогресс заучивания этого модуля?')) { scores={}; queue=[];currentId=null;answerState=null;persist();renderAll();toast('Прогресс сброшен'); } return; }
-  if (event.target.closest('#flashcard')) { flashBack=!flashBack;renderFlash();return; }
-  if (event.target.closest('#flash-prev')) { flashIndex--;flashBack=false;renderFlash();return; }
-  if (event.target.closest('#flash-next')) { flashIndex++;flashBack=false;renderFlash();return; }
+  if (event.target.closest('#flashcard')) { playSound('flip');flashBack=!flashBack;renderFlash();return; }
+  if (event.target.closest('#flash-prev')) { playSound('tap');flashIndex--;flashBack=false;renderFlash();return; }
+  if (event.target.closest('#flash-next')) { playSound('tap');flashIndex++;flashBack=false;renderFlash();return; }
   const edit = event.target.closest('[data-edit]'); if (edit) { editId=editId===edit.dataset.edit?null:edit.dataset.edit;renderEditor();return; }
   if (event.target.closest('#add-card')) { const id=`custom-${Date.now()}`;cards.unshift({id,term:'',definition:'',termNote:'',definitionNote:''});editId=id;persist();renderAll();$('#editor-list').scrollIntoView({behavior:'smooth'});return; }
   const del = event.target.closest('[data-delete]'); if (del && confirm('Удалить эту карточку?')) { cards=cards.filter(card=>card.id!==del.dataset.delete);delete scores[del.dataset.delete];editId=null;currentId=null;queue=[];persist();renderAll();toast('Карточка удалена');return; }
@@ -144,5 +187,6 @@ document.addEventListener('submit', event => {
   if (event.target.matches('.edit-form')) { event.preventDefault();const form=event.target;const card=cards.find(item=>item.id===form.dataset.id);const data=new FormData(form);const term=String(data.get('term')).trim(), definition=String(data.get('definition')).trim();if (!term||!definition) { toast('Укажите термин и перевод');return; }Object.assign(card,{term,definition,termNote:String(data.get('termNote')).trim(),definitionNote:String(data.get('definitionNote')).trim()});editId=null;persist();renderAll();toast('Карточка сохранена'); }
 });
 $('#import-input').addEventListener('change', async event => { const file=event.target.files[0];if(!file)return;try { const data=JSON.parse(await file.text());if(data.format!=='ordna-v1'||data.module!==activeModule.id||!Array.isArray(data.cards))throw Error();if(!confirm('Заменить карточки и прогресс этого модуля данными из файла?'))return;cards=data.cards;scores=data.scores||{};currentId=null;queue=[];persist();renderAll();toast('Данные загружены');}catch {toast('Не удалось прочитать файл этого модуля');}event.target.value=''; });
-document.addEventListener('keydown', event => { if (view!=='cards'||/INPUT|TEXTAREA/.test(document.activeElement.tagName))return;if(event.key==='ArrowLeft'&&flashIndex>0){flashIndex--;flashBack=false;renderFlash();}if(event.key==='ArrowRight'&&flashIndex<cards.length-1){flashIndex++;flashBack=false;renderFlash();}if(event.code==='Space'){event.preventDefault();flashBack=!flashBack;renderFlash();} });
+document.addEventListener('keydown', event => { if (view!=='cards'||/INPUT|TEXTAREA/.test(document.activeElement.tagName))return;if(event.key==='ArrowLeft'&&flashIndex>0){playSound('tap');flashIndex--;flashBack=false;renderFlash();}if(event.key==='ArrowRight'&&flashIndex<cards.length-1){playSound('tap');flashIndex++;flashBack=false;renderFlash();}if(event.code==='Space'){event.preventDefault();playSound('flip');flashBack=!flashBack;renderFlash();} });
+updateSoundButton();
 init().then(()=>{const hash=location.hash.slice(1);if(['learn','cards','edit'].includes(hash))switchView(hash);});
